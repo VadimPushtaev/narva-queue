@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Captures - Narva Queue{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Captures</h2>
+  <p class="muted">Click row to open capture details and images.</p>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Captured At</th>
+        <th>People</th>
+        <th>Status</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in captures %}
+      <tr class="clickable" onclick="window.location='/captures/{{ row.id }}'">
+        <td>{{ row.id }}</td>
+        <td>{{ row.captured_at }}</td>
+        <td>{{ row.people_count if row.people_count is not none else 'n/a' }}</td>
+        <td><span class="status-{{ row.status }}">{{ row.status }}</span></td>
+        <td>{{ row.error if row.error else '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card pagination">
+  <p>Page {{ page }} / {{ total_pages }} (total: {{ total }})</p>
+  {% if page > 1 %}
+  <a href="/captures?page={{ page - 1 }}&page_size={{ page_size }}">Previous</a>
+  {% endif %}
+  {% if page < total_pages %}
+  <a href="/captures?page={{ page + 1 }}&page_size={{ page_size }}">Next</a>
+  {% endif %}
+</div>
+{% endblock %}
+

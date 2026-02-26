@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Plots - Narva Queue{% endblock %}
+{% block content %}
+<style>
+  .plots-stack {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+</style>
+
+<div class="card">
+  <h2>People Count Trends</h2>
+  <p class="muted">Average count per bucket for each time range.</p>
+</div>
+
+<div class="plots-stack">
+  <div class="card">
+    <h3>Last Hour</h3>
+    <canvas id="chart-hour" height="100"></canvas>
+  </div>
+  <div class="card">
+    <h3>Last Day</h3>
+    <canvas id="chart-day" height="100"></canvas>
+  </div>
+  <div class="card">
+    <h3>Last Month</h3>
+    <canvas id="chart-month" height="100"></canvas>
+  </div>
+  <div class="card">
+    <h3>All Time</h3>
+    <canvas id="chart-all" height="100"></canvas>
+  </div>
+</div>
+
+<script>
+async function renderRange(rangeName, canvasId) {
+  const res = await fetch(`/api/metrics/series?range=${rangeName}`);
+  const payload = await res.json();
+  const labels = payload.points.map((p) => p.timestamp);
+  const values = payload.points.map((p) => p.value);
+  const ctx = document.getElementById(canvasId).getContext("2d");
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: `${rangeName} avg people`,
+        data: values,
+        borderColor: "#f59e0b",
+        backgroundColor: "rgba(245,158,11,0.2)",
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.2
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: true } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 6 } },
+        y: { beginAtZero: true }
+      }
+    }
+  });
+}
+
+renderRange("hour", "chart-hour");
+renderRange("day", "chart-day");
+renderRange("month", "chart-month");
+renderRange("all", "chart-all");
+</script>
+{% endblock %}

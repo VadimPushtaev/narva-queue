@@ -6,7 +6,14 @@ readme = "README.md"
 requires-python = ">=3.12,<4.0"
 authors = [{ name = "Narva Queue Team" }]
 dependencies = [
+    "alembic>=1.16.5,<2.0.0",
+    "fastapi>=0.118.0,<0.119.0",
+    "jinja2>=3.1.6,<4.0.0",
+    "pillow>=11.3.0,<12.0.0",
+    "psycopg[binary]>=3.2.10,<4.0.0",
+    "sqlalchemy>=2.0.43,<3.0.0",
     "ultralytics>=8.3.0,<9.0.0",
+    "uvicorn[standard]>=0.37.0,<0.38.0",
 ]
 
 [tool.poetry]
@@ -15,4 +22,3 @@ packages = [{ include = "narva_queue" }]
 [build-system]
 requires = ["poetry-core>=1.9.0"]
 build-backend = "poetry.core.masonry.api"
-

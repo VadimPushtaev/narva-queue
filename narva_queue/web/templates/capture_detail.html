@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Capture #{{ capture.id }} - Narva Queue{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Capture #{{ capture.id }}</h2>
+  <p><strong>Captured At:</strong> {{ capture.captured_at }}</p>
+  <p><strong>People Count:</strong> {{ capture.people_count if capture.people_count is not none else 'n/a' }}</p>
+  <p><strong>Status:</strong> <span class="status-{{ capture.status }}">{{ capture.status }}</span></p>
+  <p><strong>Camera ID:</strong> {{ capture.camera_id }}</p>
+  <p><strong>Model:</strong> {{ capture.model_name }} (conf={{ capture.confidence_threshold }})</p>
+  <p><strong>Resolution:</strong> {{ capture.image_width }} x {{ capture.image_height }}</p>
+  {% if capture.error %}
+    <p><strong>Error:</strong> {{ capture.error }}</p>
+  {% endif %}
+</div>
+
+<div class="card image-row">
+  <div>
+    <h3>Original Image</h3>
+    {% if capture.image_bytes %}
+      <img src="/captures/{{ capture.id }}/image" alt="Original capture">
+    {% else %}
+      <p class="muted">Image bytes are not available (retention cleanup may have removed them).</p>
+    {% endif %}
+  </div>
+  <div>
+    <h3>Annotated Image</h3>
+    {% if capture.annotated_image_bytes %}
+      <img src="/captures/{{ capture.id }}/annotated" alt="Annotated capture">
+    {% else %}
+      <p class="muted">Annotated image bytes are not available.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <a href="/captures">Back to table</a>
+</div>
+{% endblock %}
+

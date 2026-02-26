@@ -1,102 +1,104 @@
-# Narva Queue Tracker
+# Narva Queue Service
 
-This project starts a queue-monitoring pipeline for the Narva EU-Russia border crossing.
+Service for periodic people counting on Narva live camera snapshots.
 
-Current milestone: fetch one JPEG frame and estimate how many people are visible on that frame with YOLOv8.
+## Stack
 
-## What is implemented
+- PostgreSQL for storage
+- Alembic for schema migrations
+- Worker service for periodic capture + YOLO inference
+- FastAPI + Jinja + HTMX + Chart.js for Web UI
+- Docker Compose for local orchestration
 
-- BalticLiveCam stream URL discovery via `auth_token` endpoint.
-- One-frame JPEG capture with `ffmpeg`.
-- People counting on a single frame with YOLOv8 (`yolov8n` by default).
-- Python library API in `narva_queue.camera`.
-- CLI script to capture one frame: `scripts/get_one_jpeg.py`.
-- CLI script to capture + count people: `scripts/count_people.py`.
-- Unit tests plus optional live integration test.
-- Poetry-based dependency management.
+## Data model
 
-## Prerequisites
+Each capture row stores:
 
-- Python 3.12+
-- `ffmpeg` available in `PATH`
-- Internet access to `balticlivecam.com`
-- Poetry (`pip install poetry`)
+- timestamp and camera id
+- people count + model/confidence metadata
+- raw image bytes (JPEG)
+- annotated image bytes (PNG with yellow boxes and ROI)
+- status (`ok` / `error`) and error text
 
-## Setup (Poetry)
+Retention policy:
+
+- rows are kept forever
+- image bytes are nulled after 30 days (counts remain)
+
+## Quick start
+
+1. Create env file:
+
+```bash
+cp .env.example .env
+```
+
+2. Build and start:
+
+```bash
+docker compose up -d --build
+```
+
+On startup:
+
+- `pg` starts
+- `migrate` runs `alembic upgrade head`
+- after successful migration, `worker` and `webui` start
+
+`pg`, `worker`, and `webui` use `restart: always`, so they auto-start after machine/docker restarts.
+
+Web UI:
+
+- http://localhost:8444/
+
+## Pages
+
+- `/` dashboard with latest capture/status
+- `/plots` charts for:
+  - last hour
+  - last day
+  - last month
+  - all time
+- `/captures` paginated table of captures
+- `/captures/{id}` details with original and annotated image
+
+## API
+
+- `GET /healthz`
+- `GET /api/metrics/series?range=hour|day|month|all`
+- `GET /api/captures?page=1&page_size=50`
+- `GET /api/captures/{id}`
+- `GET /captures/{id}/image`
+- `GET /captures/{id}/annotated`
+
+## Development (Poetry)
+
+Install deps:
 
 ```bash
 poetry install
 ```
 
-## Quick start
-
-Capture one frame JPEG:
-
-```bash
-poetry run python scripts/get_one_jpeg.py --output /tmp/narva.jpg
-```
-
-Optional flags:
-
-- `--timeout` (seconds, default `30`)
-- `--camera-id` (default `461`)
-
-Capture one frame into a temp file and count people with YOLOv8:
-
-```bash
-poetry run python scripts/count_people.py
-```
-
-The script always deletes the temporary JPEG after inference.
-People are counted only inside the hardcoded queue ROI polygon.
-
-Optional flags:
-
-- `--model` (default `yolov8n.pt`)
-- `--conf` (default `0.25`)
-- `--timeout` (seconds, default `30`)
-- `--camera-id` (default `461`)
-- `--annotated-png /path/to/file.png` (optional yellow person boxes + ROI outline)
-
-Example JSON output:
-
-```json
-{
-  "timestamp_utc": "2026-02-26T17:00:00.000000+00:00",
-  "camera_id": 461,
-  "model": "yolov8n.pt",
-  "confidence_threshold": 0.25,
-  "people_count": 12,
-  "image_width": 1920,
-  "image_height": 1080,
-  "annotated_png_path": "/tmp/narva-annotated.png",
-  "status": "ok",
-  "error": null
-}
-```
-
-## Python usage
-
-```python
-from narva_queue.camera import capture_frame_to_file
-
-result = capture_frame_to_file("/tmp/narva.jpg")
-print(result)
-```
-
-## Run tests
+Run tests:
 
 ```bash
 poetry run python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-Run optional live integration test:
+Run worker locally:
 
 ```bash
-RUN_LIVE_TESTS=1 poetry run python -m unittest tests/test_balticlivecam_live.py -v
+poetry run python -m narva_queue.worker.main
 ```
 
-## Current scope and next step
+Run web app locally:
 
-- Current scope is single-frame detection only.
-- Next step is more robust queue estimation (multi-frame tracking, zones, and trend metrics).
+```bash
+poetry run uvicorn narva_queue.web.app:app --reload
+```
+
+Run migrations locally:
+
+```bash
+poetry run alembic upgrade head
+```

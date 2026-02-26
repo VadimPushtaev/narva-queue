@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Narva Queue{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Dashboard</h2>
+  <p class="muted">Quick status of current ingestion pipeline.</p>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Total Captures</h3>
+    <div>{{ total_captures }}</div>
+  </div>
+  <div class="card">
+    <h3>Successful Captures</h3>
+    <div>{{ ok_captures }}</div>
+  </div>
+  <div class="card">
+    <h3>Latest Count</h3>
+    <div>
+      {% if latest and latest.people_count is not none %}
+      {{ latest.people_count }}
+      {% else %}
+      n/a
+      {% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <h3>Latest Status</h3>
+    {% if latest %}
+      <div class="status-{{ latest.status }}">{{ latest.status }}</div>
+    {% else %}
+      <div class="muted">No data yet</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h3>Latest Capture</h3>
+  {% if latest %}
+  <p><strong>ID:</strong> {{ latest.id }}</p>
+  <p><strong>Captured At:</strong> {{ latest.captured_at }}</p>
+  <p><strong>People Count:</strong> {{ latest.people_count }}</p>
+  <p><strong>Status:</strong> <span class="status-{{ latest.status }}">{{ latest.status }}</span></p>
+  {% if latest.error %}
+    <p><strong>Error:</strong> {{ latest.error }}</p>
+  {% endif %}
+  <p><a href="/captures/{{ latest.id }}">Open details</a></p>
+  {% else %}
+  <p class="muted">No captures yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
+

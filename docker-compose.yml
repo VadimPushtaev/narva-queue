@@ -1,0 +1,65 @@
+services:
+  pg:
+    image: postgres:16-alpine
+    container_name: narva-pg
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-narva_queue}
+      POSTGRES_USER: ${POSTGRES_USER:-narva}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-narva}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-narva} -d ${POSTGRES_DB:-narva_queue}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+
+  migrate:
+    build: .
+    container_name: narva-migrate
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://narva:narva@pg:5432/narva_queue}
+    depends_on:
+      pg:
+        condition: service_healthy
+    restart: "no"
+
+  worker:
+    build: .
+    container_name: narva-worker
+    command: ["python", "-m", "narva_queue.worker.main"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://narva:narva@pg:5432/narva_queue}
+      CAPTURE_INTERVAL_SECONDS: ${CAPTURE_INTERVAL_SECONDS:-60}
+      IMAGE_TTL_DAYS: ${IMAGE_TTL_DAYS:-30}
+      CAMERA_ID: ${CAMERA_ID:-461}
+      YOLO_MODEL: ${YOLO_MODEL:-yolov8n.pt}
+      YOLO_CONF: ${YOLO_CONF:-0.25}
+      DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-50}
+    depends_on:
+      pg:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: always
+
+  webui:
+    build: .
+    container_name: narva-webui
+    command: ["uvicorn", "narva_queue.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://narva:narva@pg:5432/narva_queue}
+      DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-50}
+    depends_on:
+      pg:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${WEBUI_PORT:-8444}:8000"
+    restart: always
+
+volumes:
+  pg_data:

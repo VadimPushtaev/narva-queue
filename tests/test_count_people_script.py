@@ -85,11 +85,10 @@ class CountPeopleScriptTests(unittest.TestCase):
             )
         )
 
-        with patch.object(count_people, "ROI_BASE_WIDTH", 100), patch.object(
-            count_people, "ROI_BASE_HEIGHT", 100
-        ), patch.object(
-            count_people,
-            "ROI_POLYGON_BASE",
+        with patch("narva_queue.detection.yolo.ROI_BASE_WIDTH", 100), patch(
+            "narva_queue.detection.yolo.ROI_BASE_HEIGHT", 100
+        ), patch(
+            "narva_queue.detection.yolo.ROI_POLYGON_BASE",
             [(10, 10), (90, 10), (90, 90), (10, 90)],
         ):
             people_count, image_width, image_height, person_boxes = count_people.count_people_in_image(
