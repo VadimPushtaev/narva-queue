@@ -1,0 +1,2 @@
+"""Narva queue tracking package."""
+
