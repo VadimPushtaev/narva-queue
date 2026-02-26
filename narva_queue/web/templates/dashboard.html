@@ -42,6 +42,12 @@
   <p><strong>Captured At:</strong> {{ latest.captured_at }}</p>
   <p><strong>People Count:</strong> {{ latest.people_count }}</p>
   <p><strong>Status:</strong> <span class="status-{{ latest.status }}">{{ latest.status }}</span></p>
+  {% if latest.annotated_image_bytes %}
+    <p><strong>Annotated:</strong></p>
+    <img src="/captures/{{ latest.id }}/annotated" alt="Latest annotated capture">
+  {% else %}
+    <p class="muted">Annotated image is not available for the latest capture.</p>
+  {% endif %}
   {% if latest.error %}
     <p><strong>Error:</strong> {{ latest.error }}</p>
   {% endif %}
@@ -51,4 +57,3 @@
   {% endif %}
 </div>
 {% endblock %}
-

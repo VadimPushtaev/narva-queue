@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ APP_ROOT = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(APP_ROOT / "templates"))
 settings = load_settings()
 app = FastAPI(title="Narva Queue Service")
+app.mount("/static", StaticFiles(directory=str(APP_ROOT / "static")), name="static")
 MAX_ALL_POINTS = 1000
 
 
