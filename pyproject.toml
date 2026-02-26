@@ -1,0 +1,18 @@
+[project]
+name = "narva-queue"
+version = "0.1.0"
+description = "Tools for monitoring the Narva border queue from live camera frames."
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
+authors = [{ name = "Narva Queue Team" }]
+dependencies = [
+    "ultralytics>=8.3.0,<9.0.0",
+]
+
+[tool.poetry]
+packages = [{ include = "narva_queue" }]
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
