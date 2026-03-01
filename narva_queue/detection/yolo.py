@@ -11,18 +11,13 @@ Polygon: TypeAlias = list[tuple[int, int]]
 ROI_BASE_WIDTH = 1920
 ROI_BASE_HEIGHT = 1080
 ROI_POLYGON_BASE: Polygon = [
-    (303, 465),
-    (354, 465),
-    (890, 527),
-    (1279, 588),
-    (1510, 641),
-    (1683, 702),
-    (1820, 783),
-    (1888, 841),
-    (1739, 900),
-    (1195, 817),
-    (876, 705),
-    (293, 500),
+    (656, 517),
+    (1688, 702),
+    (1918, 783),
+    (1908, 941),
+    (1213, 877),
+    (315, 521),
+    (349, 454),
 ]
 
 
@@ -174,4 +169,3 @@ def save_annotated_png(
     image_bytes = annotate_image_png(image_path, person_boxes, roi_polygon=roi_polygon)
     target.write_bytes(image_bytes)
     return str(target)
-

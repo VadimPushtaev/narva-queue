@@ -32,11 +32,14 @@ services:
     command: ["python", "-m", "narva_queue.worker.main"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://narva:narva@pg:5432/narva_queue}
-      CAPTURE_INTERVAL_SECONDS: ${CAPTURE_INTERVAL_SECONDS:-60}
+      CAPTURE_INTERVAL_SECONDS: ${CAPTURE_INTERVAL_SECONDS:-180}
       IMAGE_TTL_DAYS: ${IMAGE_TTL_DAYS:-30}
       CAMERA_ID: ${CAMERA_ID:-461}
       YOLO_MODEL: ${YOLO_MODEL:-yolov8n.pt}
-      YOLO_CONF: ${YOLO_CONF:-0.25}
+      YOLO_CONF: ${YOLO_CONF:-0.15}
+      STORAGE_MAX_WIDTH: ${STORAGE_MAX_WIDTH:-960}
+      STORAGE_MAX_HEIGHT: ${STORAGE_MAX_HEIGHT:-540}
+      STORAGE_JPEG_QUALITY: ${STORAGE_JPEG_QUALITY:-70}
       DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-50}
     depends_on:
       pg:

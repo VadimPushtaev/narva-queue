@@ -142,7 +142,7 @@ class CountPeopleScriptTests(unittest.TestCase):
         self.assertEqual(payload["image_height"], 1080)
         self.assertEqual(payload["model"], "yolov8n.pt")
         self.assertEqual(payload["camera_id"], 461)
-        self.assertEqual(payload["confidence_threshold"], 0.25)
+        self.assertEqual(payload["confidence_threshold"], 0.15)
         self.assertIsNone(payload["annotated_png_path"])
         mock_save_annotated_png.assert_not_called()
         self.assertFalse(tmp_path.exists(), "Temporary JPEG should be removed")

@@ -16,6 +16,9 @@ class AppSettings:
     camera_id: int
     yolo_model: str
     yolo_conf: float
+    storage_max_width: int
+    storage_max_height: int
+    storage_jpeg_quality: int
     default_page_size: int
 
 
@@ -46,11 +49,13 @@ def load_settings() -> AppSettings:
     """Load all app settings from the environment."""
     return AppSettings(
         database_url=os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL),
-        capture_interval_seconds=_env_int("CAPTURE_INTERVAL_SECONDS", 60),
+        capture_interval_seconds=_env_int("CAPTURE_INTERVAL_SECONDS", 180),
         image_ttl_days=_env_int("IMAGE_TTL_DAYS", 30),
         camera_id=_env_int("CAMERA_ID", 461),
         yolo_model=os.getenv("YOLO_MODEL", "yolov8n.pt"),
-        yolo_conf=_env_float("YOLO_CONF", 0.25),
+        yolo_conf=_env_float("YOLO_CONF", 0.15),
+        storage_max_width=_env_int("STORAGE_MAX_WIDTH", 960),
+        storage_max_height=_env_int("STORAGE_MAX_HEIGHT", 540),
+        storage_jpeg_quality=_env_int("STORAGE_JPEG_QUALITY", 70),
         default_page_size=_env_int("DEFAULT_PAGE_SIZE", 50),
     )
-

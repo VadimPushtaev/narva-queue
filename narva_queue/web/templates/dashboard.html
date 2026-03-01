@@ -38,20 +38,26 @@
 <div class="card">
   <h3>Latest Capture</h3>
   {% if latest %}
-  <p><strong>ID:</strong> {{ latest.id }}</p>
-  <p><strong>Captured At:</strong> {{ latest.captured_at }}</p>
-  <p><strong>People Count:</strong> {{ latest.people_count }}</p>
-  <p><strong>Status:</strong> <span class="status-{{ latest.status }}">{{ latest.status }}</span></p>
-  {% if latest.annotated_image_bytes %}
-    <p><strong>Annotated:</strong></p>
-    <img src="/captures/{{ latest.id }}/annotated" alt="Latest annotated capture">
-  {% else %}
-    <p class="muted">Annotated image is not available for the latest capture.</p>
-  {% endif %}
-  {% if latest.error %}
-    <p><strong>Error:</strong> {{ latest.error }}</p>
-  {% endif %}
-  <p><a href="/captures/{{ latest.id }}">Open details</a></p>
+  <div class="image-row">
+    <div>
+      <p><strong>ID:</strong> {{ latest.id }}</p>
+      <p><strong>Captured At:</strong> {{ latest.captured_at }}</p>
+      <p><strong>People Count:</strong> {{ latest.people_count }}</p>
+      <p><strong>Status:</strong> <span class="status-{{ latest.status }}">{{ latest.status }}</span></p>
+      {% if latest.error %}
+        <p><strong>Error:</strong> {{ latest.error }}</p>
+      {% endif %}
+      <p><a href="/captures/{{ latest.id }}">Open details</a></p>
+    </div>
+    <div>
+      {% if latest.annotated_image_bytes %}
+        <p><strong>Annotated:</strong></p>
+        <img src="/captures/{{ latest.id }}/annotated" alt="Latest annotated capture">
+      {% else %}
+        <p class="muted">Annotated image is not available for the latest capture.</p>
+      {% endif %}
+    </div>
+  </div>
   {% else %}
   <p class="muted">No captures yet.</p>
   {% endif %}

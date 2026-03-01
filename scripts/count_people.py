@@ -48,8 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.25,
-        help="Detection confidence threshold (default: 0.25).",
+        default=0.15,
+        help="Detection confidence threshold (default: 0.15).",
     )
     parser.add_argument(
         "--annotated-png",
@@ -170,4 +170,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

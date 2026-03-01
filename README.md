@@ -16,14 +16,16 @@ Each capture row stores:
 
 - timestamp and camera id
 - people count + model/confidence metadata
-- raw image bytes (JPEG)
-- annotated image bytes (PNG with yellow boxes and ROI)
+- downscaled original image bytes (JPEG)
+- downscaled annotated image bytes (JPEG with yellow boxes and ROI)
 - status (`ok` / `error`) and error text
 
 Retention policy:
 
 - rows are kept forever
 - image bytes are nulled after 30 days (counts remain)
+
+Default capture cadence is every 3 minutes (`CAPTURE_INTERVAL_SECONDS=180`).
 
 ## Quick start
 
@@ -51,21 +53,24 @@ Web UI:
 
 - http://localhost:8444/
 
+Key environment knobs:
+
+- `CAPTURE_INTERVAL_SECONDS` (default `180`)
+- `YOLO_CONF` (default `0.15`)
+- `STORAGE_MAX_WIDTH` / `STORAGE_MAX_HEIGHT` (default `960x540`)
+- `STORAGE_JPEG_QUALITY` (default `70`)
+
 ## Pages
 
 - `/` dashboard with latest capture/status
-- `/plots` charts for:
-  - last hour
-  - last day
-  - last month
-  - all time
+- `/plots` interactive timeline explorer with two independent stacked plots
 - `/captures` paginated table of captures
 - `/captures/{id}` details with original and annotated image
 
 ## API
 
 - `GET /healthz`
-- `GET /api/metrics/series?range=hour|day|month|all`
+- `GET /api/metrics/timeline?from=<ISO8601>&to=<ISO8601>&tz=Europe/Helsinki`
 - `GET /api/captures?page=1&page_size=50`
 - `GET /api/captures/{id}`
 - `GET /captures/{id}/image`

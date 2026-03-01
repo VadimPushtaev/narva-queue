@@ -27,7 +27,7 @@ class Capture(Base):
     image_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True, default="image/jpeg")
     annotated_image_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     annotated_image_mime_type: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, default="image/png"
+        String(100), nullable=True, default="image/jpeg"
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -38,4 +38,3 @@ class Capture(Base):
     __table_args__ = (
         Index("ix_captures_status_captured_at", "status", "captured_at"),
     )
-

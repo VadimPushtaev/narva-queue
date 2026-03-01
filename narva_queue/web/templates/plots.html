@@ -7,67 +7,546 @@
     grid-template-columns: 1fr;
     gap: 16px;
   }
+
+  .plots-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .plot-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .plot-button {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #0f172a;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .plot-button.active {
+    border-color: #f59e0b;
+    background: #fff7ed;
+    color: #9a3412;
+  }
+
+  .plot-input {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+
+  .plot-meta {
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .plot-canvas {
+    width: 100%;
+    height: 420px;
+  }
 </style>
 
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
+
 <div class="card">
-  <h2>People Count Trends</h2>
-  <p class="muted">Average count per bucket for each time range.</p>
+  <h2>People Count Explorer</h2>
+  <p class="muted">Interactive timeline with independent comparison charts (Helsinki time).</p>
+  <div class="plots-toolbar">
+    <label>
+      <input id="toggle-day-separators" type="checkbox" checked>
+      Show day separators
+    </label>
+  </div>
 </div>
 
 <div class="plots-stack">
-  <div class="card">
-    <h3>Last Hour</h3>
-    <canvas id="chart-hour" height="100"></canvas>
+  <div class="card chart-card" data-chart-id="a">
+    <h3>Chart A</h3>
+    <div class="plot-controls">
+      <div class="control-row quick-ranges">
+        <button class="plot-button" data-range="last-day">Last Day</button>
+        <button class="plot-button active" data-range="last-24h">Last 24h</button>
+        <button class="plot-button" data-range="last-7d">Last 7 Days</button>
+        <button class="plot-button" data-range="last-month">Last Month</button>
+        <button class="plot-button" data-range="all-time">All Time</button>
+      </div>
+      <div class="control-row">
+        <label>From (Helsinki): <input class="plot-input from-input" type="datetime-local"></label>
+        <label>To (Helsinki): <input class="plot-input to-input" type="datetime-local"></label>
+        <button class="plot-button apply-range">Apply</button>
+        <label>
+          Smoothing:
+          <select class="plot-input smoothing-select">
+            <option value="raw">Raw</option>
+            <option value="sma:5" selected>SMA (5)</option>
+            <option value="sma:15">SMA (15)</option>
+            <option value="sma:45">SMA (45)</option>
+            <option value="ema:0.5">EMA (0.5)</option>
+            <option value="ema:0.25">EMA (0.25)</option>
+            <option value="ema:0.1">EMA (0.1)</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="plot-meta" data-meta></div>
+    <div id="plot-a" class="plot-canvas"></div>
   </div>
-  <div class="card">
-    <h3>Last Day</h3>
-    <canvas id="chart-day" height="100"></canvas>
-  </div>
-  <div class="card">
-    <h3>Last Month</h3>
-    <canvas id="chart-month" height="100"></canvas>
-  </div>
-  <div class="card">
-    <h3>All Time</h3>
-    <canvas id="chart-all" height="100"></canvas>
+
+  <div class="card chart-card" data-chart-id="b">
+    <h3>Chart B</h3>
+    <div class="plot-controls">
+      <div class="control-row quick-ranges">
+        <button class="plot-button" data-range="last-day">Last Day</button>
+        <button class="plot-button" data-range="last-24h">Last 24h</button>
+        <button class="plot-button" data-range="last-7d">Last 7 Days</button>
+        <button class="plot-button active" data-range="last-month">Last Month</button>
+        <button class="plot-button" data-range="all-time">All Time</button>
+      </div>
+      <div class="control-row">
+        <label>From (Helsinki): <input class="plot-input from-input" type="datetime-local"></label>
+        <label>To (Helsinki): <input class="plot-input to-input" type="datetime-local"></label>
+        <button class="plot-button apply-range">Apply</button>
+        <label>
+          Smoothing:
+          <select class="plot-input smoothing-select">
+            <option value="raw" selected>Raw</option>
+            <option value="sma:5">SMA (5)</option>
+            <option value="sma:15">SMA (15)</option>
+            <option value="sma:45">SMA (45)</option>
+            <option value="ema:0.5">EMA (0.5)</option>
+            <option value="ema:0.25">EMA (0.25)</option>
+            <option value="ema:0.1">EMA (0.1)</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="plot-meta" data-meta></div>
+    <div id="plot-b" class="plot-canvas"></div>
   </div>
 </div>
 
 <script>
-async function renderRange(rangeName, canvasId) {
-  const res = await fetch(`/api/metrics/series?range=${rangeName}`);
-  const payload = await res.json();
-  const labels = payload.points.map((p) => p.timestamp);
-  const values = payload.points.map((p) => p.value);
-  const ctx = document.getElementById(canvasId).getContext("2d");
-  new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: `${rangeName} avg people`,
-        data: values,
-        borderColor: "#f59e0b",
-        backgroundColor: "rgba(245,158,11,0.2)",
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.2
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 6 } },
-        y: { beginAtZero: true }
+const { DateTime } = luxon;
+const HELSINKI_TZ = "Europe/Helsinki";
+
+const charts = {
+  a: {
+    id: "a",
+    plotId: "plot-a",
+    defaultRange: "last-24h",
+    range: "last-24h",
+    fromIso: null,
+    toIso: null,
+    smoothing: "sma:5",
+    relayoutTimer: null,
+    relayoutBound: false
+  },
+  b: {
+    id: "b",
+    plotId: "plot-b",
+    defaultRange: "last-month",
+    range: "last-month",
+    fromIso: null,
+    toIso: null,
+    smoothing: "raw",
+    relayoutTimer: null,
+    relayoutBound: false
+  }
+};
+
+function nowHelsinki() {
+  return DateTime.now().setZone(HELSINKI_TZ);
+}
+
+function computeRange(rangeName) {
+  const now = nowHelsinki();
+  if (rangeName === "last-day") {
+    return {
+      fromIso: now.startOf("day").toUTC().toISO(),
+      toIso: now.toUTC().toISO()
+    };
+  }
+  if (rangeName === "last-24h") {
+    return {
+      fromIso: now.minus({ hours: 24 }).toUTC().toISO(),
+      toIso: now.toUTC().toISO()
+    };
+  }
+  if (rangeName === "last-7d") {
+    return {
+      fromIso: now.minus({ days: 7 }).toUTC().toISO(),
+      toIso: now.toUTC().toISO()
+    };
+  }
+  if (rangeName === "last-month") {
+    return {
+      fromIso: now.minus({ days: 30 }).toUTC().toISO(),
+      toIso: now.toUTC().toISO()
+    };
+  }
+  if (rangeName === "all-time") {
+    return {
+      fromIso: null,
+      toIso: now.toUTC().toISO()
+    };
+  }
+  throw new Error(`unsupported range ${rangeName}`);
+}
+
+function toDatetimeLocalValue(iso) {
+  if (!iso) {
+    return "";
+  }
+  return DateTime.fromISO(iso, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("yyyy-LL-dd'T'HH:mm");
+}
+
+function fromDatetimeLocalValue(value) {
+  if (!value) {
+    return null;
+  }
+  const dt = DateTime.fromISO(value, { zone: HELSINKI_TZ });
+  return dt.isValid ? dt.toUTC().toISO() : null;
+}
+
+function parseSmoothing(value) {
+  if (value === "raw") {
+    return { mode: "raw", n: null, alpha: null };
+  }
+  const [mode, rawParam] = value.split(":");
+  if (mode === "sma") {
+    return { mode, n: Number(rawParam), alpha: null };
+  }
+  if (mode === "ema") {
+    return { mode, n: null, alpha: Number(rawParam) };
+  }
+  return { mode: "raw", n: null, alpha: null };
+}
+
+function applySmoothing(values, smoothingValue) {
+  const cfg = parseSmoothing(smoothingValue);
+  if (cfg.mode === "raw") {
+    return values;
+  }
+  if (cfg.mode === "sma") {
+    const out = [];
+    for (let i = 0; i < values.length; i += 1) {
+      const start = Math.max(0, i - cfg.n + 1);
+      let sum = 0;
+      let count = 0;
+      for (let j = start; j <= i; j += 1) {
+        sum += values[j];
+        count += 1;
       }
+      out.push(sum / count);
     }
+    return out;
+  }
+  if (cfg.mode === "ema") {
+    const out = [];
+    let current = null;
+    for (const value of values) {
+      if (current === null) {
+        current = value;
+      } else {
+        current = cfg.alpha * value + (1 - cfg.alpha) * current;
+      }
+      out.push(current);
+    }
+    return out;
+  }
+  return values;
+}
+
+function computeTickValues(minX, maxX, count = 6) {
+  if (minX >= maxX) {
+    return [minX];
+  }
+  const out = [];
+  const step = (maxX - minX) / (count - 1);
+  for (let i = 0; i < count; i += 1) {
+    out.push(minX + step * i);
+  }
+  return out;
+}
+
+function tickLabel(ms) {
+  return DateTime.fromMillis(ms, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("dd/LL, HH:mm");
+}
+
+function hoverLabel(ms) {
+  return DateTime.fromMillis(ms, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("yyyy-LL-dd HH:mm:ss ZZZZ");
+}
+
+function daySeparatorShapes(minX, maxX) {
+  const show = document.getElementById("toggle-day-separators").checked;
+  if (!show) {
+    return [];
+  }
+  const shapes = [];
+  let cursor = DateTime.fromMillis(minX, { zone: "utc" }).setZone(HELSINKI_TZ).startOf("day");
+  if (cursor.toMillis() <= minX) {
+    cursor = cursor.plus({ days: 1 });
+  }
+  while (cursor.toMillis() < maxX) {
+    const x = cursor.toUTC().toMillis();
+    shapes.push({
+      type: "line",
+      x0: x,
+      x1: x,
+      y0: 0,
+      y1: 1,
+      xref: "x",
+      yref: "paper",
+      line: {
+        color: "rgba(15, 23, 42, 0.35)",
+        width: 1,
+        dash: "dash"
+      }
+    });
+    cursor = cursor.plus({ days: 1 });
+  }
+  return shapes;
+}
+
+function setQuickButtonState(card, activeRange) {
+  const buttons = card.querySelectorAll(".quick-ranges .plot-button");
+  buttons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.range === activeRange);
   });
 }
 
-renderRange("hour", "chart-hour");
-renderRange("day", "chart-day");
-renderRange("month", "chart-month");
-renderRange("all", "chart-all");
+function updateInputs(card, chartState) {
+  card.querySelector(".from-input").value = toDatetimeLocalValue(chartState.fromIso);
+  card.querySelector(".to-input").value = toDatetimeLocalValue(chartState.toIso);
+}
+
+function updateMeta(card, payload) {
+  const metaEl = card.querySelector("[data-meta]");
+  const fromLabel = payload.from
+    ? DateTime.fromISO(payload.from, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("yyyy-LL-dd HH:mm")
+    : "-";
+  const toLabel = payload.to
+    ? DateTime.fromISO(payload.to, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("yyyy-LL-dd HH:mm")
+    : "-";
+  const bucketLabel = payload.bucket_seconds === null ? "raw" : `${payload.bucket_seconds}s`;
+  metaEl.textContent = `Mode: ${payload.mode}, bucket: ${bucketLabel}, points: ${payload.points.length}, range: ${fromLabel} -> ${toLabel} (${HELSINKI_TZ})`;
+}
+
+async function fetchTimeline(chartState) {
+  const params = new URLSearchParams();
+  if (chartState.fromIso) {
+    params.set("from", chartState.fromIso);
+  }
+  if (chartState.toIso) {
+    params.set("to", chartState.toIso);
+  }
+  params.set("tz", HELSINKI_TZ);
+  const res = await fetch(`/api/metrics/timeline?${params.toString()}`);
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(`Failed to fetch timeline (${res.status}): ${msg}`);
+  }
+  return res.json();
+}
+
+function extractRangeFromRelayout(eventData, plotEl) {
+  if (eventData["xaxis.range[0]"] !== undefined && eventData["xaxis.range[1]"] !== undefined) {
+    return [Number(eventData["xaxis.range[0]"]), Number(eventData["xaxis.range[1]"])];
+  }
+  if (Array.isArray(eventData["xaxis.range"])) {
+    return [Number(eventData["xaxis.range"][0]), Number(eventData["xaxis.range"][1])];
+  }
+  if (eventData["xaxis.autorange"] && plotEl.layout && Array.isArray(plotEl.layout.xaxis.range)) {
+    return [Number(plotEl.layout.xaxis.range[0]), Number(plotEl.layout.xaxis.range[1])];
+  }
+  return null;
+}
+
+async function renderChart(chartState) {
+  const card = document.querySelector(`.chart-card[data-chart-id="${chartState.id}"]`);
+  const payload = await fetchTimeline(chartState);
+  updateMeta(card, payload);
+
+  const x = payload.points.map((p) => Date.parse(p.timestamp));
+  const rawY = payload.points.map((p) => Number(p.value));
+  const y = applySmoothing(rawY, chartState.smoothing);
+  const hoverText = x.map((ms) => hoverLabel(ms));
+  const minX = x.length ? x[0] : Date.now() - (24 * 3600 * 1000);
+  const maxX = x.length ? x[x.length - 1] : Date.now();
+  const tickvals = computeTickValues(minX, maxX, 6);
+  const ticktext = tickvals.map((ms) => tickLabel(ms));
+  const plotEl = document.getElementById(chartState.plotId);
+
+  const trace = {
+    type: "scatter",
+    mode: "lines",
+    x,
+    y,
+    line: { color: "#f59e0b", width: 2, shape: "spline", smoothing: 0.6 },
+    customdata: hoverText,
+    hovertemplate: "%{customdata}<br>People: %{y:.2f}<extra></extra>",
+    name: "people"
+  };
+
+  const layout = {
+    margin: { t: 8, r: 16, b: 44, l: 44 },
+    paper_bgcolor: "#ffffff",
+    plot_bgcolor: "#ffffff",
+    xaxis: {
+      type: "linear",
+      tickmode: "array",
+      tickvals,
+      ticktext,
+      title: { text: "Time (Europe/Helsinki)" },
+      showgrid: true,
+      gridcolor: "rgba(15, 23, 42, 0.08)"
+    },
+    yaxis: {
+      rangemode: "tozero",
+      title: { text: "People Count" },
+      showgrid: true,
+      gridcolor: "rgba(15, 23, 42, 0.08)"
+    },
+    shapes: daySeparatorShapes(minX, maxX),
+    showlegend: false
+  };
+
+  const config = {
+    responsive: true,
+    displaylogo: false,
+    scrollZoom: true,
+    modeBarButtonsToRemove: ["lasso2d", "select2d"]
+  };
+
+  await Plotly.react(plotEl, [trace], layout, config);
+}
+
+async function reloadChart(chartState) {
+  const card = document.querySelector(`.chart-card[data-chart-id="${chartState.id}"]`);
+  try {
+    await renderChart(chartState);
+    bindRelayoutIfNeeded(chartState);
+    updateInputs(card, chartState);
+  } catch (err) {
+    card.querySelector("[data-meta]").textContent = `Failed to load chart: ${err.message}`;
+  }
+}
+
+function bindRelayoutIfNeeded(chartState) {
+  if (chartState.relayoutBound) {
+    return;
+  }
+  const card = document.querySelector(`.chart-card[data-chart-id="${chartState.id}"]`);
+  const plotEl = document.getElementById(chartState.plotId);
+  if (typeof plotEl.on !== "function") {
+    return;
+  }
+
+  plotEl.on("plotly_relayout", (eventData) => {
+    const range = extractRangeFromRelayout(eventData, plotEl);
+    if (!range) {
+      return;
+    }
+    chartState.range = null;
+    chartState.fromIso = new Date(range[0]).toISOString();
+    chartState.toIso = new Date(range[1]).toISOString();
+    setQuickButtonState(card, "__none__");
+    clearTimeout(chartState.relayoutTimer);
+    chartState.relayoutTimer = setTimeout(() => {
+      reloadChart(chartState);
+    }, 400);
+  });
+  chartState.relayoutBound = true;
+}
+
+function wireChartControls(chartState) {
+  const card = document.querySelector(`.chart-card[data-chart-id="${chartState.id}"]`);
+  const smoothingSelect = card.querySelector(".smoothing-select");
+  const applyButton = card.querySelector(".apply-range");
+  const fromInput = card.querySelector(".from-input");
+  const toInput = card.querySelector(".to-input");
+
+  card.querySelectorAll(".quick-ranges .plot-button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const rangeName = button.dataset.range;
+      const range = computeRange(rangeName);
+      chartState.range = rangeName;
+      chartState.fromIso = range.fromIso;
+      chartState.toIso = range.toIso;
+      setQuickButtonState(card, rangeName);
+      await reloadChart(chartState);
+    });
+  });
+
+  applyButton.addEventListener("click", async () => {
+    const fromIso = fromDatetimeLocalValue(fromInput.value);
+    const toIso = fromDatetimeLocalValue(toInput.value);
+    if (!toIso) {
+      alert("Please provide a valid 'To' datetime.");
+      return;
+    }
+    if (fromInput.value && !fromIso) {
+      alert("Please provide a valid 'From' datetime.");
+      return;
+    }
+    if (fromIso && fromIso >= toIso) {
+      alert("'From' must be earlier than 'To'.");
+      return;
+    }
+    chartState.range = null;
+    chartState.fromIso = fromIso;
+    chartState.toIso = toIso;
+    setQuickButtonState(card, "__none__");
+    await reloadChart(chartState);
+  });
+
+  smoothingSelect.addEventListener("change", async () => {
+    chartState.smoothing = smoothingSelect.value;
+    await reloadChart(chartState);
+  });
+
+}
+
+async function initChart(chartState) {
+  const card = document.querySelector(`.chart-card[data-chart-id="${chartState.id}"]`);
+  card.querySelector(".smoothing-select").value = chartState.smoothing;
+  const defaultRange = computeRange(chartState.defaultRange);
+  chartState.fromIso = defaultRange.fromIso;
+  chartState.toIso = defaultRange.toIso;
+  setQuickButtonState(card, chartState.defaultRange);
+  updateInputs(card, chartState);
+  wireChartControls(chartState);
+  await reloadChart(chartState);
+}
+
+async function init() {
+  await initChart(charts.a);
+  await initChart(charts.b);
+
+  document.getElementById("toggle-day-separators").addEventListener("change", async () => {
+    await reloadChart(charts.a);
+    await reloadChart(charts.b);
+  });
+}
+
+init();
 </script>
 {% endblock %}

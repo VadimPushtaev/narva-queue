@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+import math
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,8 @@ templates = Jinja2Templates(directory=str(APP_ROOT / "templates"))
 settings = load_settings()
 app = FastAPI(title="Narva Queue Service")
 app.mount("/static", StaticFiles(directory=str(APP_ROOT / "static")), name="static")
-MAX_ALL_POINTS = 1000
+AUTO_TARGET_POINTS = 400
+AUTO_BUCKET_CANDIDATES_SECONDS = (60, 300, 900, 1800, 3600, 10800, 21600, 43200, 86400, 604800)
 
 
 def get_db() -> Session:
@@ -32,73 +34,134 @@ def get_db() -> Session:
         yield session
 
 
-def _range_to_bucket_and_since(range_name: str) -> tuple[str, datetime | None]:
-    now = datetime.now(timezone.utc)
-    if range_name == "hour":
-        return "minute", now - timedelta(hours=1)
-    if range_name == "day":
-        return "raw", now - timedelta(days=1)
-    if range_name == "month":
-        return "hour", now - timedelta(days=30)
-    if range_name == "all":
-        return "raw", None
-    raise HTTPException(status_code=400, detail="range must be one of: hour, day, month, all")
+def _coerce_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        raise HTTPException(status_code=400, detail="datetime query params must include timezone")
+    return dt.astimezone(timezone.utc)
 
 
-def _downsample_points(points: list[dict[str, Any]], max_points: int) -> list[dict[str, Any]]:
-    """Uniformly sample points while preserving first/last and chronology."""
-    size = len(points)
-    if size <= max_points or max_points <= 0:
-        return points
-    if max_points == 1:
-        return [points[-1]]
-
-    raw_indices = [
-        round(i * (size - 1) / (max_points - 1))
-        for i in range(max_points)
-    ]
-    dedup_indices: list[int] = []
-    seen: set[int] = set()
-    for idx in raw_indices:
-        if idx not in seen:
-            dedup_indices.append(idx)
-            seen.add(idx)
-    return [points[idx] for idx in dedup_indices]
+def _pick_bucket_seconds(
+    span_seconds: float,
+    target_points: int = AUTO_TARGET_POINTS,
+    candidates: tuple[int, ...] = AUTO_BUCKET_CANDIDATES_SECONDS,
+) -> int:
+    if span_seconds <= 0:
+        return candidates[0]
+    for bucket_seconds in candidates:
+        if math.ceil(span_seconds / bucket_seconds) <= target_points:
+            return bucket_seconds
+    return candidates[-1]
 
 
-def _series_data(db: Session, range_name: str) -> dict[str, Any]:
-    bucket_name, since = _range_to_bucket_and_since(range_name)
-    base_where = [Capture.status == "ok", Capture.people_count.is_not(None)]
-    if since is not None:
-        base_where.append(Capture.captured_at >= since)
+def _aggregate_timeline_rows(
+    rows: list[Any],
+    from_utc: datetime,
+    bucket_seconds: int,
+) -> list[dict[str, Any]]:
+    buckets: dict[int, dict[str, Any]] = {}
 
-    if bucket_name == "raw":
-        stmt = (
-            select(Capture.captured_at, Capture.people_count)
-            .where(*base_where)
-            .order_by(Capture.captured_at)
+    for row in rows:
+        row_ts = row.captured_at
+        if row_ts.tzinfo is None:
+            row_ts = row_ts.replace(tzinfo=timezone.utc)
+        else:
+            row_ts = row_ts.astimezone(timezone.utc)
+        bucket_idx = int((row_ts - from_utc).total_seconds() // bucket_seconds)
+        bucket = buckets.setdefault(
+            bucket_idx,
+            {"sum": 0.0, "count": 0, "last_timestamp": row_ts},
         )
-        rows = db.execute(stmt).all()
+        bucket["sum"] += float(row.people_count)
+        bucket["count"] += 1
+        if row_ts > bucket["last_timestamp"]:
+            bucket["last_timestamp"] = row_ts
+
+    points: list[dict[str, Any]] = []
+    for bucket_idx in sorted(buckets):
+        bucket = buckets[bucket_idx]
+        points.append(
+            {
+                "timestamp": bucket["last_timestamp"].isoformat(),
+                "value": bucket["sum"] / bucket["count"],
+                "samples": bucket["count"],
+            }
+        )
+    return points
+
+
+def _timeline_data(
+    db: Session,
+    from_ts: datetime | None,
+    to_ts: datetime | None,
+    tz: str = "Europe/Helsinki",
+) -> dict[str, Any]:
+    to_utc = _coerce_utc(to_ts) if to_ts is not None else datetime.now(timezone.utc)
+    from_utc = _coerce_utc(from_ts) if from_ts is not None else None
+
+    if from_utc is not None and from_utc >= to_utc:
+        raise HTTPException(status_code=400, detail="'from' must be earlier than 'to'")
+
+    base_where = [Capture.status == "ok", Capture.people_count.is_not(None), Capture.captured_at <= to_utc]
+    if from_utc is None:
+        earliest = db.execute(
+            select(Capture.captured_at).where(*base_where).order_by(Capture.captured_at).limit(1)
+        ).scalar_one_or_none()
+        if earliest is None:
+            return {
+                "from": to_utc.isoformat(),
+                "to": to_utc.isoformat(),
+                "tz": tz,
+                "mode": "raw",
+                "bucket_seconds": None,
+                "target_points": AUTO_TARGET_POINTS,
+                "points": [],
+            }
+        if earliest.tzinfo is None:
+            earliest = earliest.replace(tzinfo=timezone.utc)
+        from_utc = earliest.astimezone(timezone.utc)
+
+    where = [Capture.status == "ok", Capture.people_count.is_not(None)]
+    where.append(Capture.captured_at >= from_utc)
+    where.append(Capture.captured_at <= to_utc)
+
+    rows = db.execute(
+        select(Capture.captured_at, Capture.people_count).where(*where).order_by(Capture.captured_at)
+    ).all()
+
+    span_seconds = max((to_utc - from_utc).total_seconds(), 1.0)
+    if len(rows) <= AUTO_TARGET_POINTS:
         points = [
-            {"timestamp": row.captured_at.isoformat(), "value": float(row.people_count)}
+            {
+                "timestamp": (
+                    row.captured_at.replace(tzinfo=timezone.utc).isoformat()
+                    if row.captured_at.tzinfo is None
+                    else row.captured_at.astimezone(timezone.utc).isoformat()
+                ),
+                "value": float(row.people_count),
+                "samples": 1,
+            }
             for row in rows
         ]
-        if range_name == "all":
-            points = _downsample_points(points, MAX_ALL_POINTS)
-    else:
-        bucket = func.date_trunc(bucket_name, Capture.captured_at).label("bucket")
-        stmt = (
-            select(bucket, func.avg(Capture.people_count).label("avg_count"))
-            .where(*base_where)
-            .group_by(bucket)
-            .order_by(bucket)
-        )
-        rows = db.execute(stmt).all()
-        points = [
-            {"timestamp": row.bucket.isoformat(), "value": float(row.avg_count)}
-            for row in rows
-        ]
-    return {"range": range_name, "points": points}
+        return {
+            "from": from_utc.isoformat(),
+            "to": to_utc.isoformat(),
+            "tz": tz,
+            "mode": "raw",
+            "bucket_seconds": None,
+            "target_points": AUTO_TARGET_POINTS,
+            "points": points,
+        }
+
+    bucket_seconds = _pick_bucket_seconds(span_seconds)
+    return {
+        "from": from_utc.isoformat(),
+        "to": to_utc.isoformat(),
+        "tz": tz,
+        "mode": "aggregated",
+        "bucket_seconds": bucket_seconds,
+        "target_points": AUTO_TARGET_POINTS,
+        "points": _aggregate_timeline_rows(rows, from_utc, bucket_seconds),
+    }
 
 
 def _latest_capture(db: Session) -> Capture | None:
@@ -173,12 +236,14 @@ def capture_detail(
     )
 
 
-@app.get("/api/metrics/series")
-def metrics_series(
-    range: str = Query(default="hour"),  # noqa: A002
+@app.get("/api/metrics/timeline")
+def metrics_timeline(
+    from_ts: datetime | None = Query(default=None, alias="from"),
+    to_ts: datetime | None = Query(default=None, alias="to"),
+    tz: str = Query(default="Europe/Helsinki"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    return JSONResponse(_series_data(db, range))
+    return JSONResponse(_timeline_data(db, from_ts=from_ts, to_ts=to_ts, tz=tz))
 
 
 @app.get("/api/captures")
@@ -251,7 +316,7 @@ def capture_annotated_image(capture_id: int, db: Session = Depends(get_db)) -> R
         raise HTTPException(status_code=404, detail="Annotated image not found")
     return Response(
         content=row.annotated_image_bytes,
-        media_type=row.annotated_image_mime_type or "image/png",
+        media_type=row.annotated_image_mime_type or "image/jpeg",
     )
 
 

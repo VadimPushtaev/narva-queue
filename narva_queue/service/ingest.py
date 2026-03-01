@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -12,6 +13,54 @@ from narva_queue.config import AppSettings
 from narva_queue.db.models import Capture
 from narva_queue.camera import capture_frame_to_file
 from narva_queue.detection import count_people_in_image, get_scaled_roi_polygon, annotate_image_png
+
+
+def _encode_resized_jpeg_from_path(
+    image_path: Path,
+    *,
+    max_width: int,
+    max_height: int,
+    quality: int,
+) -> bytes:
+    with image_path.open("rb") as source:
+        return _encode_resized_jpeg_bytes(
+            source.read(),
+            max_width=max_width,
+            max_height=max_height,
+            quality=quality,
+        )
+
+
+def _encode_resized_jpeg_bytes(
+    image_bytes: bytes,
+    *,
+    max_width: int,
+    max_height: int,
+    quality: int,
+) -> bytes:
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise RuntimeError(
+            "Pillow is not installed. Reinstall project dependencies with `poetry install`."
+        ) from exc
+
+    safe_max_width = max(1, int(max_width))
+    safe_max_height = max(1, int(max_height))
+    safe_quality = min(95, max(1, int(quality)))
+
+    with Image.open(BytesIO(image_bytes)) as image:
+        image = image.convert("RGB")
+        image.thumbnail((safe_max_width, safe_max_height), Image.Resampling.LANCZOS)
+
+        buff = BytesIO()
+        image.save(
+            buff,
+            format="JPEG",
+            quality=safe_quality,
+            optimize=True,
+        )
+        return buff.getvalue()
 
 
 def ingest_capture(session: Session, model, settings: AppSettings) -> Capture:
@@ -45,6 +94,18 @@ def ingest_capture(session: Session, model, settings: AppSettings) -> Capture:
             person_boxes=person_boxes,
             roi_polygon=roi_polygon,
         )
+        stored_image_jpeg = _encode_resized_jpeg_from_path(
+            temp_jpg_path,
+            max_width=settings.storage_max_width,
+            max_height=settings.storage_max_height,
+            quality=settings.storage_jpeg_quality,
+        )
+        stored_annotated_jpeg = _encode_resized_jpeg_bytes(
+            annotated_png_bytes,
+            max_width=settings.storage_max_width,
+            max_height=settings.storage_max_height,
+            quality=settings.storage_jpeg_quality,
+        )
 
         row = Capture(
             captured_at=datetime.now(timezone.utc),
@@ -54,10 +115,10 @@ def ingest_capture(session: Session, model, settings: AppSettings) -> Capture:
             model_name=settings.yolo_model,
             image_width=image_width,
             image_height=image_height,
-            image_bytes=temp_jpg_path.read_bytes(),
+            image_bytes=stored_image_jpeg,
             image_mime_type="image/jpeg",
-            annotated_image_bytes=annotated_png_bytes,
-            annotated_image_mime_type="image/png",
+            annotated_image_bytes=stored_annotated_jpeg,
+            annotated_image_mime_type="image/jpeg",
             status="ok",
             error=None,
         )
@@ -85,4 +146,3 @@ def ingest_capture(session: Session, model, settings: AppSettings) -> Capture:
         return row
     finally:
         temp_jpg_path.unlink(missing_ok=True)
-
