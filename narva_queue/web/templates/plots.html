@@ -295,6 +295,55 @@ function hoverLabel(ms) {
   return DateTime.fromMillis(ms, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("yyyy-LL-dd HH:mm:ss ZZZZ");
 }
 
+function median(values) {
+  if (!values.length) {
+    return null;
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[mid];
+  }
+  return (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function withGapBreaks(x, y, hoverText, bucketSeconds) {
+  if (x.length < 2) {
+    return { x, y, hoverText };
+  }
+
+  const deltas = [];
+  for (let i = 1; i < x.length; i += 1) {
+    const delta = x[i] - x[i - 1];
+    if (delta > 0) {
+      deltas.push(delta);
+    }
+  }
+
+  const expectedDeltaMs = bucketSeconds === null ? median(deltas) : (bucketSeconds * 1000);
+  if (!expectedDeltaMs || expectedDeltaMs <= 0) {
+    return { x, y, hoverText };
+  }
+
+  const gapThresholdMs = expectedDeltaMs * 2.5;
+  const xOut = [x[0]];
+  const yOut = [y[0]];
+  const hoverOut = [hoverText[0]];
+
+  for (let i = 1; i < x.length; i += 1) {
+    if ((x[i] - x[i - 1]) > gapThresholdMs) {
+      xOut.push(x[i - 1] + 1);
+      yOut.push(null);
+      hoverOut.push("");
+    }
+    xOut.push(x[i]);
+    yOut.push(y[i]);
+    hoverOut.push(hoverText[i]);
+  }
+
+  return { x: xOut, y: yOut, hoverText: hoverOut };
+}
+
 function daySeparatorShapes(minX, maxX) {
   const show = document.getElementById("toggle-day-separators").checked;
   if (!show) {
@@ -387,8 +436,9 @@ async function renderChart(chartState) {
 
   const x = payload.points.map((p) => Date.parse(p.timestamp));
   const rawY = payload.points.map((p) => Number(p.value));
-  const y = applySmoothing(rawY, chartState.smoothing);
+  const smoothedY = applySmoothing(rawY, chartState.smoothing);
   const hoverText = x.map((ms) => hoverLabel(ms));
+  const plotSeries = withGapBreaks(x, smoothedY, hoverText, payload.bucket_seconds);
   const minX = x.length ? x[0] : Date.now() - (24 * 3600 * 1000);
   const maxX = x.length ? x[x.length - 1] : Date.now();
   const tickvals = computeTickValues(minX, maxX, 6);
@@ -398,10 +448,11 @@ async function renderChart(chartState) {
   const trace = {
     type: "scatter",
     mode: "lines",
-    x,
-    y,
+    x: plotSeries.x,
+    y: plotSeries.y,
+    connectgaps: false,
     line: { color: "#f59e0b", width: 2, shape: "spline", smoothing: 0.6 },
-    customdata: hoverText,
+    customdata: plotSeries.hoverText,
     hovertemplate: "%{customdata}<br>People: %{y:.2f}<extra></extra>",
     name: "people"
   };

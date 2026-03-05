@@ -49,6 +49,12 @@ On startup:
 
 `pg`, `worker`, and `webui` use `restart: always`, so they auto-start after machine/docker restarts.
 
+Compose builds three service-specific images from one multi-stage `Dockerfile`:
+
+- `narva-queue-migrate` (lean migration runtime)
+- `narva-queue-webui` (lean web runtime without YOLO deps/model)
+- `narva-queue-worker` (includes YOLO deps and baked `yolov8n.pt`)
+
 Web UI:
 
 - http://localhost:8444/
@@ -82,6 +88,12 @@ Install deps:
 
 ```bash
 poetry install
+```
+
+Install worker deps (YOLO / local worker run):
+
+```bash
+poetry install --with worker
 ```
 
 Run tests:

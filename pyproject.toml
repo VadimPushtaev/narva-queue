@@ -12,12 +12,14 @@ dependencies = [
     "pillow>=11.3.0,<12.0.0",
     "psycopg[binary]>=3.2.10,<4.0.0",
     "sqlalchemy>=2.0.43,<3.0.0",
-    "ultralytics>=8.3.0,<9.0.0",
     "uvicorn[standard]>=0.37.0,<0.38.0",
 ]
 
 [tool.poetry]
 packages = [{ include = "narva_queue" }]
+
+[tool.poetry.group.worker.dependencies]
+ultralytics = ">=8.3.0,<9.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.9.0"]

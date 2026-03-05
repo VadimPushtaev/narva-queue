@@ -16,7 +16,10 @@ services:
     restart: always
 
   migrate:
-    build: .
+    image: narva-queue-migrate
+    build:
+      context: .
+      target: migrate
     container_name: narva-migrate
     command: ["alembic", "upgrade", "head"]
     environment:
@@ -27,7 +30,10 @@ services:
     restart: "no"
 
   worker:
-    build: .
+    image: narva-queue-worker
+    build:
+      context: .
+      target: worker
     container_name: narva-worker
     command: ["python", "-m", "narva_queue.worker.main"]
     environment:
@@ -49,7 +55,10 @@ services:
     restart: always
 
   webui:
-    build: .
+    image: narva-queue-webui
+    build:
+      context: .
+      target: webui
     container_name: narva-webui
     command: ["uvicorn", "narva_queue.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:

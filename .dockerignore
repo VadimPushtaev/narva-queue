@@ -1,0 +1,12 @@
+.git
+.gitignore
+.venv
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+tests/
+README.md
