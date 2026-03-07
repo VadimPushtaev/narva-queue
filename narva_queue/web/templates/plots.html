@@ -74,6 +74,10 @@
       <input id="toggle-day-separators" type="checkbox" checked>
       Show day separators
     </label>
+    <label>
+      <input id="toggle-week-separators" type="checkbox" checked>
+      Show week separators
+    </label>
   </div>
 </div>
 
@@ -344,9 +348,10 @@ function withGapBreaks(x, y, hoverText, bucketSeconds) {
   return { x: xOut, y: yOut, hoverText: hoverOut };
 }
 
-function daySeparatorShapes(minX, maxX) {
-  const show = document.getElementById("toggle-day-separators").checked;
-  if (!show) {
+function separatorShapes(minX, maxX) {
+  const showDaySeparators = document.getElementById("toggle-day-separators").checked;
+  const showWeekSeparators = document.getElementById("toggle-week-separators").checked;
+  if (!showDaySeparators && !showWeekSeparators) {
     return [];
   }
   const shapes = [];
@@ -356,20 +361,38 @@ function daySeparatorShapes(minX, maxX) {
   }
   while (cursor.toMillis() < maxX) {
     const x = cursor.toUTC().toMillis();
-    shapes.push({
-      type: "line",
-      x0: x,
-      x1: x,
-      y0: 0,
-      y1: 1,
-      xref: "x",
-      yref: "paper",
-      line: {
-        color: "rgba(15, 23, 42, 0.35)",
-        width: 1,
-        dash: "dash"
-      }
-    });
+    const isMondayBoundary = cursor.weekday === 1;
+    if (isMondayBoundary && showWeekSeparators) {
+      shapes.push({
+        type: "line",
+        x0: x,
+        x1: x,
+        y0: 0,
+        y1: 1,
+        xref: "x",
+        yref: "paper",
+        line: {
+          color: "rgba(15, 23, 42, 0.65)",
+          width: 2,
+          dash: "solid"
+        }
+      });
+    } else if (showDaySeparators) {
+      shapes.push({
+        type: "line",
+        x0: x,
+        x1: x,
+        y0: 0,
+        y1: 1,
+        xref: "x",
+        yref: "paper",
+        line: {
+          color: "rgba(15, 23, 42, 0.35)",
+          width: 1,
+          dash: "dash"
+        }
+      });
+    }
     cursor = cursor.plus({ days: 1 });
   }
   return shapes;
@@ -476,7 +499,7 @@ async function renderChart(chartState) {
       showgrid: true,
       gridcolor: "rgba(15, 23, 42, 0.08)"
     },
-    shapes: daySeparatorShapes(minX, maxX),
+    shapes: separatorShapes(minX, maxX),
     showlegend: false
   };
 
@@ -593,6 +616,10 @@ async function init() {
   await initChart(charts.b);
 
   document.getElementById("toggle-day-separators").addEventListener("change", async () => {
+    await reloadChart(charts.a);
+    await reloadChart(charts.b);
+  });
+  document.getElementById("toggle-week-separators").addEventListener("change", async () => {
     await reloadChart(charts.a);
     await reloadChart(charts.b);
   });
