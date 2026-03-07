@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Top captures - Narva Queue{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Top captures</h2>
+  <p class="muted">Highest people-count captures with marked photos and key details.</p>
+</div>
+
+{% if captures %}
+<div class="capture-grid">
+  {% for row in captures %}
+  <article class="card capture-card">
+    <a href="/captures/{{ row.id }}">
+      <img src="{% if row.annotated_image_bytes %}/captures/{{ row.id }}/annotated{% else %}/captures/{{ row.id }}/image{% endif %}" alt="Capture {{ row.id }} marked photo">
+    </a>
+    <div class="capture-info">
+      <h3><a href="/captures/{{ row.id }}">Capture #{{ row.id }}</a></h3>
+      <p><strong>People:</strong> {{ row.people_count if row.people_count is not none else 'n/a' }}</p>
+      <p><strong>Captured At:</strong> {{ row.captured_at }}</p>
+      <p><strong>Status:</strong> <span class="status-{{ row.status }}">{{ row.status }}</span></p>
+      <p><strong>Camera:</strong> {{ row.camera_id }}</p>
+      <p><strong>Model:</strong> {{ row.model_name }}</p>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <p class="muted">No captures with available photos yet.</p>
+</div>
+{% endif %}
+
+<style>
+  .capture-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+  }
+
+  .capture-card {
+    margin: 0;
+  }
+
+  .capture-card img {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+    margin-bottom: 10px;
+  }
+
+  .capture-card h3 {
+    margin: 0 0 10px;
+    font-size: 18px;
+  }
+
+  .capture-card h3 a {
+    color: #0f172a;
+    text-decoration: none;
+  }
+
+  .capture-card h3 a:hover {
+    text-decoration: underline;
+  }
+
+  .capture-info p {
+    margin: 6px 0;
+    font-size: 14px;
+  }
+</style>
+{% endblock %}

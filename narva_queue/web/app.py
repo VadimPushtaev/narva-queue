@@ -221,6 +221,30 @@ def captures_page(
     )
 
 
+@app.get("/top-captures", response_class=HTMLResponse)
+def top_captures_page(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    rows = db.execute(
+        select(Capture)
+        .where(
+            Capture.status == "ok",
+            Capture.people_count.is_not(None),
+            Capture.annotated_image_bytes.is_not(None),
+        )
+        .order_by(desc(Capture.people_count), desc(Capture.captured_at))
+        .limit(12)
+    ).scalars().all()
+    return templates.TemplateResponse(
+        "top_captures.html",
+        {
+            "request": request,
+            "captures": rows,
+        },
+    )
+
+
 @app.get("/captures/{capture_id}", response_class=HTMLResponse)
 def capture_detail(
     request: Request,
