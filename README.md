@@ -69,7 +69,8 @@ Key environment knobs:
 ## Pages
 
 - `/` dashboard with latest capture/status
-- `/plots` interactive timeline explorer with two independent stacked plots
+- `/plots` interactive timeline explorer with two independent comparison charts
+- `/days` daily average people-per-capture view with a plot and table
 - `/captures` paginated table of captures
 - `/captures/{id}` details with original and annotated image
 
@@ -77,6 +78,7 @@ Key environment knobs:
 
 - `GET /healthz`
 - `GET /api/metrics/timeline?from=<ISO8601>&to=<ISO8601>&tz=Europe/Helsinki`
+- `GET /api/metrics/days?from=<ISO8601>&to=<ISO8601>&tz=Europe/Helsinki`
 - `GET /api/captures?page=1&page_size=50`
 - `GET /api/captures/{id}`
 - `GET /captures/{id}/image`

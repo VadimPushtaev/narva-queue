@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block title %}Days - Narva Queue{% endblock %}
+{% block content %}
+<style>
+  .plot-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .plot-button {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #0f172a;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .plot-button.active {
+    border-color: #0f766e;
+    background: #ecfeff;
+    color: #115e59;
+  }
+
+  .plot-input {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+
+  .plot-meta {
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .plot-canvas {
+    width: 100%;
+    height: 360px;
+    margin-top: 12px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    margin-top: 16px;
+  }
+
+  .number-cell {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .empty-row td {
+    text-align: center;
+    color: #6b7280;
+  }
+
+  .weekend-row {
+    background: #fff7ed;
+  }
+
+  .weekend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    margin-right: 8px;
+    background: #ea580c;
+    vertical-align: middle;
+  }
+</style>
+
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
+
+<div class="card days-card">
+  <h2>Daily Averages</h2>
+  <p class="muted">Each value is the average people count per capture for the selected Helsinki day. Weekends are highlighted to make week boundaries easier to scan.</p>
+  <div class="plot-controls">
+    <div class="control-row quick-ranges">
+      <button type="button" class="plot-button" data-range="last-day">Last Day</button>
+      <button type="button" class="plot-button" data-range="last-7d">Last 7 Days</button>
+      <button type="button" class="plot-button active" data-range="last-month">Last Month</button>
+      <button type="button" class="plot-button" data-range="all-time">All Time</button>
+    </div>
+    <div class="control-row">
+      <label>From (Helsinki): <input class="plot-input from-input" type="datetime-local"></label>
+      <label>To (Helsinki): <input class="plot-input to-input" type="datetime-local"></label>
+      <button type="button" class="plot-button apply-range">Apply</button>
+    </div>
+  </div>
+  <div class="plot-meta" data-days-meta></div>
+  <div id="plot-days" class="plot-canvas"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Day</th>
+          <th class="number-cell">Average per capture</th>
+          <th class="number-cell">Samples</th>
+        </tr>
+      </thead>
+      <tbody id="days-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const { DateTime } = luxon;
+const HELSINKI_TZ = "Europe/Helsinki";
+const WEEKDAY_COLOR = "#0f766e";
+const WEEKEND_COLOR = "#ea580c";
+
+const daysState = {
+  plotId: "plot-days",
+  defaultRange: "last-month",
+  range: "last-month",
+  fromIso: null,
+  toIso: null
+};
+
+function nowHelsinki() {
+  return DateTime.now().setZone(HELSINKI_TZ);
+}
+
+function computeRange(rangeName) {
+  const now = nowHelsinki();
+  if (rangeName === "last-day") {
+    return {
+      fromIso: now.startOf("day").toUTC().toISO(),
+      toIso: now.toUTC().toISO()
+    };
+  }
+  if (rangeName === "last-7d") {
+    return {
+      fromIso: now.minus({ days: 7 }).toUTC().toISO(),
+      toIso: now.toUTC().toISO()
+    };
+  }
+  if (rangeName === "last-month") {
+    return {
+      fromIso: now.minus({ days: 30 }).toUTC().toISO(),
+      toIso: now.toUTC().toISO()
+    };
+  }
+  if (rangeName === "all-time") {
+    return {
+      fromIso: null,
+      toIso: now.toUTC().toISO()
+    };
+  }
+  throw new Error(`unsupported range ${rangeName}`);
+}
+
+function toDatetimeLocalValue(iso) {
+  if (!iso) {
+    return "";
+  }
+  return DateTime.fromISO(iso, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("yyyy-LL-dd'T'HH:mm");
+}
+
+function fromDatetimeLocalValue(value) {
+  if (!value) {
+    return null;
+  }
+  const dt = DateTime.fromISO(value, { zone: HELSINKI_TZ });
+  return dt.isValid ? dt.toUTC().toISO() : null;
+}
+
+function formatRangeLabel(iso) {
+  if (!iso) {
+    return "-";
+  }
+  return DateTime.fromISO(iso, { zone: "utc" }).setZone(HELSINKI_TZ).toFormat("yyyy-LL-dd HH:mm");
+}
+
+function dayInfo(day) {
+  const localDay = DateTime.fromFormat(day, "yyyy-LL-dd", { zone: HELSINKI_TZ });
+  const isWeekend = localDay.weekday === 6 || localDay.weekday === 7;
+  return {
+    label: localDay.toFormat("yyyy-LL-dd"),
+    weekdayLabel: localDay.toFormat("ccc"),
+    isWeekend
+  };
+}
+
+function setQuickButtonState(activeRange) {
+  document.querySelectorAll(".quick-ranges .plot-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.range === activeRange);
+  });
+}
+
+function updateInputs() {
+  document.querySelector(".from-input").value = toDatetimeLocalValue(daysState.fromIso);
+  document.querySelector(".to-input").value = toDatetimeLocalValue(daysState.toIso);
+}
+
+function updateDaysMeta(payload) {
+  document.querySelector("[data-days-meta]").textContent = `Days: ${payload.points.length}, range: ${formatRangeLabel(payload.from)} -> ${formatRangeLabel(payload.to)} (${HELSINKI_TZ}), unit: average people per capture`;
+}
+
+async function fetchDays() {
+  const params = new URLSearchParams();
+  if (daysState.fromIso) {
+    params.set("from", daysState.fromIso);
+  }
+  if (daysState.toIso) {
+    params.set("to", daysState.toIso);
+  }
+  params.set("tz", HELSINKI_TZ);
+  const res = await fetch(`/api/metrics/days?${params.toString()}`);
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(`Failed to fetch daily totals (${res.status}): ${msg}`);
+  }
+  return res.json();
+}
+
+function renderDaysTable(payload) {
+  const tbody = document.getElementById("days-table-body");
+  if (!payload.points.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No daily totals available for the selected range.</td></tr>';
+    return;
+  }
+
+  const rows = [...payload.points].reverse();
+  tbody.innerHTML = rows.map((point) => {
+    const info = dayInfo(point.day);
+    const weekendClass = info.isWeekend ? "weekend-row" : "";
+    const prefix = info.isWeekend ? '<span class="weekend-dot"></span>' : "";
+    return `
+      <tr class="${weekendClass}">
+        <td>${prefix}${info.label} (${info.weekdayLabel})</td>
+        <td class="number-cell">${Number(point.value).toFixed(2)}</td>
+        <td class="number-cell">${Number(point.samples)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function renderDaysView() {
+  const payload = await fetchDays();
+  updateDaysMeta(payload);
+  renderDaysTable(payload);
+
+  const trace = {
+    type: "bar",
+    x: payload.points.map((point) => point.day),
+    y: payload.points.map((point) => Number(point.value)),
+    marker: {
+      color: payload.points.map((point) => (dayInfo(point.day).isWeekend ? WEEKEND_COLOR : WEEKDAY_COLOR))
+    },
+    customdata: payload.points.map((point) => {
+      const info = dayInfo(point.day);
+      return [info.label, info.weekdayLabel, Number(point.samples), info.isWeekend ? "Weekend" : "Weekday"];
+    }),
+    hovertemplate: "%{customdata[0]} (%{customdata[1]})<br>%{customdata[3]}<br>Average per capture: %{y:.2f}<br>Samples: %{customdata[2]}<extra></extra>",
+    name: "average-per-capture"
+  };
+
+  const layout = {
+    margin: { t: 8, r: 16, b: 56, l: 52 },
+    paper_bgcolor: "#ffffff",
+    plot_bgcolor: "#ffffff",
+    bargap: 0.15,
+    xaxis: {
+      type: "category",
+      categoryorder: "array",
+      categoryarray: payload.points.map((point) => point.day),
+      title: { text: "Day (Europe/Helsinki)" },
+      tickangle: -30,
+      showgrid: false
+    },
+    yaxis: {
+      rangemode: "tozero",
+      title: { text: "Average People Per Capture" },
+      showgrid: true,
+      gridcolor: "rgba(15, 23, 42, 0.08)"
+    },
+    showlegend: false
+  };
+
+  const config = {
+    responsive: true,
+    displaylogo: false,
+    modeBarButtonsToRemove: ["lasso2d", "select2d"]
+  };
+
+  await Plotly.react(document.getElementById(daysState.plotId), [trace], layout, config);
+}
+
+async function reloadDays() {
+  try {
+    await renderDaysView();
+    updateInputs();
+  } catch (err) {
+    document.querySelector("[data-days-meta]").textContent = `Failed to load daily totals: ${err.message}`;
+    document.getElementById("days-table-body").innerHTML = '<tr class="empty-row"><td colspan="3">Failed to load daily totals.</td></tr>';
+  }
+}
+
+function wireControls() {
+  const applyButton = document.querySelector(".apply-range");
+  const fromInput = document.querySelector(".from-input");
+  const toInput = document.querySelector(".to-input");
+
+  document.querySelectorAll(".quick-ranges .plot-button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const rangeName = button.dataset.range;
+      const range = computeRange(rangeName);
+      daysState.range = rangeName;
+      daysState.fromIso = range.fromIso;
+      daysState.toIso = range.toIso;
+      setQuickButtonState(rangeName);
+      await reloadDays();
+    });
+  });
+
+  applyButton.addEventListener("click", async () => {
+    const fromIso = fromDatetimeLocalValue(fromInput.value);
+    const toIso = fromDatetimeLocalValue(toInput.value);
+    if (!toIso) {
+      alert("Please provide a valid 'To' datetime.");
+      return;
+    }
+    if (fromInput.value && !fromIso) {
+      alert("Please provide a valid 'From' datetime.");
+      return;
+    }
+    if (fromIso && fromIso >= toIso) {
+      alert("'From' must be earlier than 'To'.");
+      return;
+    }
+    daysState.range = null;
+    daysState.fromIso = fromIso;
+    daysState.toIso = toIso;
+    setQuickButtonState("__none__");
+    await reloadDays();
+  });
+}
+
+async function init() {
+  const defaultRange = computeRange(daysState.defaultRange);
+  daysState.fromIso = defaultRange.fromIso;
+  daysState.toIso = defaultRange.toIso;
+  setQuickButtonState(daysState.defaultRange);
+  updateInputs();
+  wireControls();
+  await reloadDays();
+}
+
+init();
+</script>
+{% endblock %}

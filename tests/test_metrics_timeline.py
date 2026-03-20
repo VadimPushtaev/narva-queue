@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from narva_queue.db.base import Base
 from narva_queue.db.models import Capture
-from narva_queue.web.app import AUTO_TARGET_POINTS, _timeline_data
+from narva_queue.web.app import AUTO_TARGET_POINTS, _daily_average_data, _timeline_data
 
 
 class MetricsTimelineTests(unittest.TestCase):
@@ -101,6 +101,44 @@ class MetricsTimelineTests(unittest.TestCase):
         returned_from = datetime.fromisoformat(payload["from"])
         self.assertEqual(returned_from, first)
         self.assertEqual(len(payload["points"]), 2)
+
+    def test_daily_average_uses_only_captures_within_range(self) -> None:
+        self._insert_capture(datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc), people_count=3)
+        self._insert_capture(datetime(2026, 2, 1, 3, 0, tzinfo=timezone.utc), people_count=5)
+        self._insert_capture(datetime(2026, 2, 1, 4, 0, tzinfo=timezone.utc), people_count=7)
+        self.session.commit()
+
+        payload = _daily_average_data(
+            self.session,
+            from_ts=datetime(2026, 2, 1, 1, 0, tzinfo=timezone.utc),
+            to_ts=datetime(2026, 2, 1, 4, 0, tzinfo=timezone.utc),
+            tz="UTC",
+        )
+
+        self.assertEqual(len(payload["points"]), 1)
+        point = payload["points"][0]
+        self.assertEqual(point["day"], "2026-02-01")
+        self.assertAlmostEqual(point["value"], 6.0)
+        self.assertEqual(point["samples"], 2)
+
+    def test_daily_average_groups_by_helsinki_day(self) -> None:
+        self._insert_capture(datetime(2026, 2, 1, 20, 30, tzinfo=timezone.utc), people_count=2)
+        self._insert_capture(datetime(2026, 2, 1, 21, 30, tzinfo=timezone.utc), people_count=4)
+        self._insert_capture(datetime(2026, 2, 2, 8, 0, tzinfo=timezone.utc), people_count=6)
+        self.session.commit()
+
+        payload = _daily_average_data(
+            self.session,
+            from_ts=datetime(2026, 2, 1, 20, 0, tzinfo=timezone.utc),
+            to_ts=datetime(2026, 2, 2, 9, 0, tzinfo=timezone.utc),
+            tz="Europe/Helsinki",
+        )
+
+        self.assertEqual([point["day"] for point in payload["points"]], ["2026-02-01", "2026-02-02"])
+        self.assertAlmostEqual(payload["points"][0]["value"], 3.0)
+        self.assertEqual(payload["points"][0]["samples"], 2)
+        self.assertAlmostEqual(payload["points"][1]["value"], 6.0)
+        self.assertEqual(payload["points"][1]["samples"], 1)
 
 
 if __name__ == "__main__":

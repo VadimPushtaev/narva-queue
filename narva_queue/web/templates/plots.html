@@ -86,16 +86,16 @@
     <h3>Chart A</h3>
     <div class="plot-controls">
       <div class="control-row quick-ranges">
-        <button class="plot-button" data-range="last-day">Last Day</button>
-        <button class="plot-button active" data-range="last-24h">Last 24h</button>
-        <button class="plot-button" data-range="last-7d">Last 7 Days</button>
-        <button class="plot-button" data-range="last-month">Last Month</button>
-        <button class="plot-button" data-range="all-time">All Time</button>
+        <button type="button" class="plot-button" data-range="last-day">Last Day</button>
+        <button type="button" class="plot-button active" data-range="last-24h">Last 24h</button>
+        <button type="button" class="plot-button" data-range="last-7d">Last 7 Days</button>
+        <button type="button" class="plot-button" data-range="last-month">Last Month</button>
+        <button type="button" class="plot-button" data-range="all-time">All Time</button>
       </div>
       <div class="control-row">
         <label>From (Helsinki): <input class="plot-input from-input" type="datetime-local"></label>
         <label>To (Helsinki): <input class="plot-input to-input" type="datetime-local"></label>
-        <button class="plot-button apply-range">Apply</button>
+        <button type="button" class="plot-button apply-range">Apply</button>
         <label>
           Smoothing:
           <select class="plot-input smoothing-select">
@@ -118,16 +118,16 @@
     <h3>Chart B</h3>
     <div class="plot-controls">
       <div class="control-row quick-ranges">
-        <button class="plot-button" data-range="last-day">Last Day</button>
-        <button class="plot-button" data-range="last-24h">Last 24h</button>
-        <button class="plot-button" data-range="last-7d">Last 7 Days</button>
-        <button class="plot-button active" data-range="last-month">Last Month</button>
-        <button class="plot-button" data-range="all-time">All Time</button>
+        <button type="button" class="plot-button" data-range="last-day">Last Day</button>
+        <button type="button" class="plot-button" data-range="last-24h">Last 24h</button>
+        <button type="button" class="plot-button" data-range="last-7d">Last 7 Days</button>
+        <button type="button" class="plot-button active" data-range="last-month">Last Month</button>
+        <button type="button" class="plot-button" data-range="all-time">All Time</button>
       </div>
       <div class="control-row">
         <label>From (Helsinki): <input class="plot-input from-input" type="datetime-local"></label>
         <label>To (Helsinki): <input class="plot-input to-input" type="datetime-local"></label>
-        <button class="plot-button apply-range">Apply</button>
+        <button type="button" class="plot-button apply-range">Apply</button>
         <label>
           Smoothing:
           <select class="plot-input smoothing-select">
@@ -596,7 +596,6 @@ function wireChartControls(chartState) {
     chartState.smoothing = smoothingSelect.value;
     await reloadChart(chartState);
   });
-
 }
 
 async function initChart(chartState) {

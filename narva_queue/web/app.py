@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import math
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -40,6 +41,19 @@ def _coerce_utc(dt: datetime) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def _timestamp_to_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _resolve_zone(tz: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(tz)
+    except ZoneInfoNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=f"Unsupported timezone: {tz}") from exc
+
+
 def _pick_bucket_seconds(
     span_seconds: float,
     target_points: int = AUTO_TARGET_POINTS,
@@ -61,11 +75,7 @@ def _aggregate_timeline_rows(
     buckets: dict[int, dict[str, Any]] = {}
 
     for row in rows:
-        row_ts = row.captured_at
-        if row_ts.tzinfo is None:
-            row_ts = row_ts.replace(tzinfo=timezone.utc)
-        else:
-            row_ts = row_ts.astimezone(timezone.utc)
+        row_ts = _timestamp_to_utc(row.captured_at)
         bucket_idx = int((row_ts - from_utc).total_seconds() // bucket_seconds)
         bucket = buckets.setdefault(
             bucket_idx,
@@ -116,9 +126,7 @@ def _timeline_data(
                 "target_points": AUTO_TARGET_POINTS,
                 "points": [],
             }
-        if earliest.tzinfo is None:
-            earliest = earliest.replace(tzinfo=timezone.utc)
-        from_utc = earliest.astimezone(timezone.utc)
+        from_utc = _timestamp_to_utc(earliest)
 
     where = [Capture.status == "ok", Capture.people_count.is_not(None)]
     where.append(Capture.captured_at >= from_utc)
@@ -132,11 +140,7 @@ def _timeline_data(
     if len(rows) <= AUTO_TARGET_POINTS:
         points = [
             {
-                "timestamp": (
-                    row.captured_at.replace(tzinfo=timezone.utc).isoformat()
-                    if row.captured_at.tzinfo is None
-                    else row.captured_at.astimezone(timezone.utc).isoformat()
-                ),
+                "timestamp": _timestamp_to_utc(row.captured_at).isoformat(),
                 "value": float(row.people_count),
                 "samples": 1,
             }
@@ -161,6 +165,86 @@ def _timeline_data(
         "bucket_seconds": bucket_seconds,
         "target_points": AUTO_TARGET_POINTS,
         "points": _aggregate_timeline_rows(rows, from_utc, bucket_seconds),
+    }
+
+
+def _daily_average_data(
+    db: Session,
+    from_ts: datetime | None,
+    to_ts: datetime | None,
+    tz: str = "Europe/Helsinki",
+) -> dict[str, Any]:
+    zone = _resolve_zone(tz)
+    to_utc = _coerce_utc(to_ts) if to_ts is not None else datetime.now(timezone.utc)
+    from_utc = _coerce_utc(from_ts) if from_ts is not None else None
+
+    if from_utc is not None and from_utc >= to_utc:
+        raise HTTPException(status_code=400, detail="'from' must be earlier than 'to'")
+
+    filters = [Capture.status == "ok", Capture.people_count.is_not(None), Capture.captured_at <= to_utc]
+
+    if from_utc is None:
+        earliest = db.execute(
+            select(Capture.captured_at).where(*filters).order_by(Capture.captured_at).limit(1)
+        ).scalar_one_or_none()
+        if earliest is None:
+            return {
+                "from": to_utc.isoformat(),
+                "to": to_utc.isoformat(),
+                "tz": tz,
+                "unit": "people_per_capture",
+                "points": [],
+            }
+        from_utc = _timestamp_to_utc(earliest)
+
+    rows = db.execute(
+        select(Capture.captured_at, Capture.people_count)
+        .where(
+            Capture.status == "ok",
+            Capture.people_count.is_not(None),
+            Capture.captured_at >= from_utc,
+            Capture.captured_at <= to_utc,
+        )
+        .order_by(Capture.captured_at)
+    ).all()
+
+    if not rows:
+        return {
+            "from": from_utc.isoformat(),
+            "to": to_utc.isoformat(),
+            "tz": tz,
+            "unit": "people_per_capture",
+            "points": [],
+        }
+
+    day_buckets: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        day_key = _timestamp_to_utc(row.captured_at).astimezone(zone).date().isoformat()
+        bucket = day_buckets.setdefault(
+            day_key,
+            {
+                "day": day_key,
+                "sum": 0.0,
+                "samples": 0,
+            },
+        )
+        bucket["sum"] += float(row.people_count)
+        bucket["samples"] += 1
+
+    points = [
+        {
+            "day": key,
+            "value": day_buckets[key]["sum"] / day_buckets[key]["samples"],
+            "samples": day_buckets[key]["samples"],
+        }
+        for key in sorted(day_buckets)
+    ]
+    return {
+        "from": from_utc.isoformat(),
+        "to": to_utc.isoformat(),
+        "tz": tz,
+        "unit": "people_per_capture",
+        "points": points,
     }
 
 
@@ -191,6 +275,11 @@ def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
 @app.get("/plots", response_class=HTMLResponse)
 def plots_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("plots.html", {"request": request})
+
+
+@app.get("/days", response_class=HTMLResponse)
+def days_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("days.html", {"request": request})
 
 
 @app.get("/captures", response_class=HTMLResponse)
@@ -268,6 +357,16 @@ def metrics_timeline(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     return JSONResponse(_timeline_data(db, from_ts=from_ts, to_ts=to_ts, tz=tz))
+
+
+@app.get("/api/metrics/days")
+def metrics_days(
+    from_ts: datetime | None = Query(default=None, alias="from"),
+    to_ts: datetime | None = Query(default=None, alias="to"),
+    tz: str = Query(default="Europe/Helsinki"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    return JSONResponse(_daily_average_data(db, from_ts=from_ts, to_ts=to_ts, tz=tz))
 
 
 @app.get("/api/captures")
